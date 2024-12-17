@@ -1,0 +1,189 @@
+// export users
+Route::get('/users-export-xlsx', [ExportController::class, 'exportUsersInExcel'])->name('users.export.excel');
+Route::get('/users-export-csv', [ExportController::class, 'exportUsersInCsv'])->name('users.export.csv');
+Route::get('/users-export-pdf', [ExportController::class, 'exportUsersInPdf'])->name('users.export.pdf');
+Route::get('/delete-selected-users-export', [ExportController::class, 'deletedUsers'])->name('delete-selected.users');
+
+<!-- in controllr -->
+// users export in xlsx
+    public function exportUsersInExcel(Request $request)
+    {
+        $ids = $request->query('ids'); // Get the selected IDs from the query string
+        $idsArray = explode(',', $ids); // Convert the comma-separated IDs to an array
+        
+        return Excel::download(new UsersExport($idsArray), 'users.xlsx');
+    }
+        
+        // users export in csv
+            public function exportUsersInCsv(Request $request)
+            {
+                $ids = $request->query('ids'); // Get the selected IDs
+                $idsArray = explode(',', $ids); // Convert the selected IDs into an array
+                
+                return Excel::download(new UsersExport($idsArray), 'users.csv', \Maatwebsite\Excel\Excel::CSV);
+            }
+        
+        // users export in pdf
+            public function exportUsersInPdf(Request $request)
+        {
+            // Get selected user IDs
+            $ids = explode(',', $request->query('ids'));
+            $users = User::whereIn('id', $ids)->orderBy('created_at','desc')->get();
+            $pdf = Pdf::loadView('Exports.users-pdf', ['users' => $users]);
+            return $pdf->download('users.pdf');
+        }
+
+
+        // delete  selected user
+        public function deletedUsers(Request $request){
+            $ids=$request->ids;
+            $deleted=User::whereIn('id',$ids)->delete();
+            if($deleted){
+            return response()->json(['success'=>true, 'message'=>'The selected items successfully deleted.']);
+            }
+            return response()->json(['success'=>false, 'message'=>'Failed to delete the selected items. Please try again.']);
+        }
+
+
+
+<script>
+
+document.addEventListener('DOMContentLoaded', function () {
+    // Handle Select All checkbox
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.selectOneByOne');
+    const exportButtons = document.querySelectorAll('#excel, #csv, #pdf');
+    const deleteSelected = document.getElementById('deleteSelected');
+    
+    // Select All checkbox functionality
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function () {
+            const isChecked = selectAllCheckbox.checked;
+            checkboxes.forEach((checkbox) => {
+                checkbox.checked = isChecked;
+            });
+        });
+    }
+
+    // Individual checkbox change event
+    checkboxes.forEach((checkbox) => {
+        checkbox.addEventListener('change', function () {
+            // If any checkbox is unchecked, uncheck Select All
+            if (!this.checked) {
+                selectAllCheckbox.checked = false;
+            }
+
+            // If all checkboxes are checked, check Select All
+            if (Array.from(checkboxes).every((cb) => cb.checked)) {
+                selectAllCheckbox.checked = true;
+            }
+        });
+    });
+    
+    
+    // delete selected items
+    deleteSelected.addEventListener("click", function () {
+    const selectedIds = Array.from(checkboxes)
+        .filter((checkbox) => checkbox.checked)
+        .map((checkbox) => checkbox.getAttribute('data-id'));
+    
+    if (selectedIds.length === 0) {
+        alert("Please select at least one item to delete.");
+        return;
+    }
+    
+     const confirmation = confirm("Are you sure you want to delete the selected items?");
+
+if (confirmation) {
+    
+     
+    $.ajax({
+        type: "GET", 
+        url: "{{ route('delete-selected.users') }}",
+        data: {
+            ids: selectedIds,
+        },
+        success: function (response) {
+            if (response) {
+                alert(response.message);
+            }
+            location.reload();
+        },
+        error: function (response) {
+            if (response.responseJSON) {
+                alert(response.responseJSON.message);
+            }
+        },
+    });
+    
+}
+
+});
+
+
+    // Export functionality for Excel, CSV, and PDF
+    exportButtons.forEach((button) => {
+        button.addEventListener('click', function () {
+            const selectedIds = Array.from(checkboxes)
+                .filter((checkbox) => checkbox.checked)
+                .map((checkbox) => checkbox.getAttribute('data-id'));
+
+            if (selectedIds.length > 0) {
+                let url;
+                const exportType = this.id; // Get the ID of the clicked button
+
+                // Map button ID to the appropriate URL
+                if (exportType === 'excel') {
+                    url = "/users-export-xlsx?ids=" + selectedIds.join(',');
+                } else if (exportType === 'csv') {
+                    url = "/users-export-csv?ids=" + selectedIds.join(',');
+                } else if (exportType === 'pdf') {
+                    url = "/users-export-pdf?ids=" + selectedIds.join(',');
+                }
+
+                // Redirect to the generated URL
+                window.location.href = url;
+            } else {
+                alert('Please select at least one user.');
+            }
+        });
+    });
+});
+
+</script>
+
+
+
+
+
+in controller agr columns same values ho or agr unmai sai latest fecth krna ho to this code using
+ // Get the latest attendance for the user
+   
+  //  specific user attendance  report  in xlsx
+    public function exportSpecificUserAttendanceReportInExcel(Request $request)
+    {
+        $ids = $request->query('ids'); // Get the selected IDs
+        $idsArray = explode(',', $ids);
+        
+    // Get the latest attendance for the user it is sibgle record
+    $empName = Attendance::whereIn('id', $idsArray)
+        ->select('user_id', DB::raw('MAX(date) as latest_date'))
+        ->with('user')
+        ->groupBy('user_id')
+        ->first();
+
+<!-- **************************** -->
+// Fetch more records
+    $attendances = Attendance::whereIn('user_id', $ids)
+        ->select('user_id', DB::raw('MAX(date) as latest_date'))  // Get the latest attendance date
+        ->groupBy('user_id')  // Group by user_id
+        ->with('user')  // Load user data
+        ->orderBy('created_at', 'desc')  // Optional, depending on your need
+        ->get();
+<!-- **************************** -->
+
+
+
+        
+        return Excel::download(new SpecificUserAttendanceExport($idsArray), $empName->user->name.''.'.xlsx');
+    }
