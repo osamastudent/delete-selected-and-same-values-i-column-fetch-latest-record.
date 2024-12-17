@@ -1,0 +1,1 @@
+# delete-selected-and-same-values-i-column-fetch-latest-record.
